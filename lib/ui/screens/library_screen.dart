@@ -95,7 +95,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
               child: Consumer<PlaybackProvider>(
                 builder: (context, provider, child) {
                   if (provider.library.isEmpty) {
-                    return const Center(child: Text('No music found.\nTap + to import.', textAlign: TextAlign.center, style: TextStyle(color: CupertinoColors.systemGrey)));
+                    return const Center(child: Text('Loading music...', textAlign: TextAlign.center, style: TextStyle(color: CupertinoColors.systemGrey)));
                   }
 
                   return ListView.builder(
