@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import '../../state/playback_provider.dart';
@@ -98,17 +99,33 @@ class _LibraryScreenState extends State<LibraryScreen> {
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
+      backgroundColor: const Color(0x00000000), // Transparent
       navigationBar: CupertinoNavigationBar(
-        middle: const Text('Library'),
+        backgroundColor: const Color(0x00000000), // Transparent
+        border: null,
+        middle: const Text('Library', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: CupertinoColors.white)),
         trailing: CupertinoButton(
           padding: EdgeInsets.zero,
           onPressed: _importMusic,
-          child: const Icon(CupertinoIcons.add),
+          child: const Icon(CupertinoIcons.add, color: CupertinoColors.white),
         ),
       ),
       child: SafeArea(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const Padding(
+              padding: EdgeInsets.only(left: 20.0, top: 16.0, bottom: 8.0),
+              child: Text(
+                'Recent Discoveries',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w600,
+                  color: CupertinoColors.white,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
             Expanded(
               child: Consumer<PlaybackProvider>(
                 builder: (context, provider, child) {
@@ -117,23 +134,89 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   }
 
                   return ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                     itemCount: provider.library.length,
                     itemBuilder: (context, index) {
                       final song = provider.library[index];
                       return GestureDetector(
                         onLongPress: () => _showContextMenu(context, song),
-                        child: CupertinoListTile(
-                          title: Text(song.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                          subtitle: Text(song.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: CupertinoColors.systemGrey)),
-                          leading: song.artworkPath != null 
-                              ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: Image.file(File(song.artworkPath!), width: 40, height: 40, fit: BoxFit.cover))
-                              : const Icon(CupertinoIcons.music_note, size: 30, color: CupertinoColors.systemGrey),
-                          onTap: () {
-                            provider.playSong(song, contextQueue: provider.library);
-                            Navigator.of(context).push(CupertinoPageRoute(builder: (_) => const NowPlayingScreen()));
-                          },
+                        onTap: () {
+                          provider.playSong(song, contextQueue: provider.library);
+                          Navigator.of(context).push(CupertinoPageRoute(builder: (_) => const NowPlayingScreen()));
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 12.0),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(20),
+                            color: const Color(0x1AFFFFFF), // Semi-transparent white
+                            border: Border.all(color: const Color(0x1AFFFFFF), width: 1),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                              child: Padding(
+                                padding: const EdgeInsets.all(12.0),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 56,
+                                      height: 56,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(12),
+                                        color: CupertinoColors.black.withOpacity(0.3),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: CupertinoColors.black.withOpacity(0.2),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 4),
+                                          ),
+                                        ],
+                                      ),
+                                      clipBehavior: Clip.hardEdge,
+                                      child: song.artworkPath != null 
+                                          ? Image.file(File(song.artworkPath!), fit: BoxFit.cover)
+                                          : const Icon(CupertinoIcons.music_note, size: 28, color: CupertinoColors.systemGrey),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            song.title,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w600,
+                                              color: CupertinoColors.white,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            song.artist,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: CupertinoColors.white.withOpacity(0.6),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    CupertinoButton(
+                                      padding: EdgeInsets.zero,
+                                      onPressed: () => _showContextMenu(context, song),
+                                      child: Icon(CupertinoIcons.ellipsis, color: CupertinoColors.white.withOpacity(0.6)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       );
                     },
