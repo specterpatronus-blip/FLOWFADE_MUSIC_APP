@@ -8,7 +8,6 @@ class AudioEngineManager: NSObject {
     
     // Core Audio Engine
     private let engine = AVAudioEngine()
-    private let mixerNode = AVAudioMixerNode()
     private let playerNodeA = AVAudioPlayerNode()
     private let playerNodeB = AVAudioPlayerNode()
     
@@ -24,7 +23,6 @@ class AudioEngineManager: NSObject {
     
     private override init() {
         super.init()
-        setupEngine()
         setupAudioSession()
         setupRemoteCommandCenter()
     }
@@ -79,27 +77,12 @@ class AudioEngineManager: NSObject {
         }
     }
     
-    private func setupEngine() {
-        engine.attach(playerNodeA)
-        engine.attach(playerNodeB)
-        engine.attach(mixerNode)
-        
-        engine.connect(playerNodeA, to: mixerNode, format: nil)
-        engine.connect(playerNodeB, to: mixerNode, format: nil)
-        engine.connect(mixerNode, to: engine.mainMixerNode, format: nil)
-        
-        do {
-            try engine.start()
-        } catch {
-            print("AudioEngineManager: Failed to start engine: \(error)")
-        }
-    }
-    
     private func setupAudioSession() {
         let session = AVAudioSession.sharedInstance()
         do {
             try session.setCategory(.playback, mode: .default, options: [])
             try session.setActive(true)
+            print("AudioEngineManager: Audio session configured for playback")
         } catch {
             print("AudioEngineManager: Failed to setup audio session: \(error)")
         }
@@ -132,9 +115,41 @@ class AudioEngineManager: NSObject {
     // MARK: - Playback Controls
     
     func playTrack(at path: String) {
+        print("AudioEngineManager: playTrack called with path: \(path)")
+        
         let url = URL(fileURLWithPath: path)
+        
+        // Verify file exists
+        guard FileManager.default.fileExists(atPath: path) else {
+            print("AudioEngineManager: ERROR - File does not exist at \(path)")
+            return
+        }
+        
         guard let file = try? AVAudioFile(forReading: url) else {
-            print("AudioEngineManager: Cannot read file at \(path)")
+            print("AudioEngineManager: ERROR - Cannot read audio file at \(path)")
+            return
+        }
+        
+        let format = file.processingFormat
+        print("AudioEngineManager: File format -> sampleRate: \(format.sampleRate), channels: \(format.channelCount)")
+        
+        // Stop everything and rebuild the engine graph with the correct format
+        engine.stop()
+        engine.reset()
+        
+        // Attach nodes fresh
+        engine.attach(playerNodeA)
+        engine.attach(playerNodeB)
+        
+        // Connect with the actual file format so there is no sample rate mismatch
+        engine.connect(playerNodeA, to: engine.mainMixerNode, format: format)
+        engine.connect(playerNodeB, to: engine.mainMixerNode, format: format)
+        
+        do {
+            try engine.start()
+            print("AudioEngineManager: Engine started successfully")
+        } catch {
+            print("AudioEngineManager: ERROR - Failed to start engine: \(error)")
             return
         }
         
@@ -142,6 +157,7 @@ class AudioEngineManager: NSObject {
         
         primaryPlayer.stop()
         primaryPlayer.scheduleFile(file, at: nil, completionHandler: nil)
+        primaryPlayer.play()
         
         if isPlayerAPrimary {
             currentFileA = file
@@ -149,16 +165,14 @@ class AudioEngineManager: NSObject {
             currentFileB = file
         }
         
-        primaryPlayer.play()
         isPlaying = true
+        print("AudioEngineManager: ✅ Playback started for \(url.lastPathComponent)")
         
-        // Setup crossfade timer logic here...
-        // For the sake of the initial scaffolding, we will just play.
-        // Equal power crossfade schedule logic will go here.
         updateNowPlayingInfo(with: url)
     }
     
     func pause() {
+        print("AudioEngineManager: pause()")
         if isPlayerAPrimary {
             playerNodeA.pause()
         } else {
@@ -168,6 +182,7 @@ class AudioEngineManager: NSObject {
     }
     
     func resume() {
+        print("AudioEngineManager: resume()")
         if isPlayerAPrimary {
             playerNodeA.play()
         } else {
@@ -177,7 +192,9 @@ class AudioEngineManager: NSObject {
     }
     
     private func updateNowPlayingInfo(with url: URL) {
-        // We will update MPNowPlayingInfoCenter here or from Flutter
-        // via a separate channel method receiving artist/title metadata
+        // Basic now-playing update
+        var nowPlayingInfo = [String: Any]()
+        nowPlayingInfo[MPMediaItemPropertyTitle] = url.deletingPathExtension().lastPathComponent
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
     }
 }
