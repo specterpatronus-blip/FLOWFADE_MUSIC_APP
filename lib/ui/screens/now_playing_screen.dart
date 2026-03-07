@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import '../../state/playback_provider.dart';
@@ -9,74 +10,93 @@ class NowPlayingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
+      backgroundColor: const Color(0x00000000),
       navigationBar: const CupertinoNavigationBar(
-        middle: Text('Now Playing'),
+        backgroundColor: Color(0x00000000),
+        border: null,
+        middle: Text('NOW PLAYING', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: CupertinoColors.systemGrey, letterSpacing: 2.0)),
       ),
       child: SafeArea(
         child: Consumer<PlaybackProvider>(
           builder: (context, provider, child) {
             final song = provider.currentSong;
-            
+
             if (song == null) {
-              return const Center(child: Text('Nothing is playing'));
+              return const Center(child: Text('Nothing is playing', style: TextStyle(color: CupertinoColors.systemGrey)));
             }
 
             return Padding(
-              padding: const EdgeInsets.all(32.0),
+              padding: const EdgeInsets.symmetric(horizontal: 32.0),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Artwork
-                  AspectRatio(
-                    aspectRatio: 1,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        color: CupertinoColors.systemGrey6,
-                        boxShadow: [
-                          BoxShadow(
-                            color: CupertinoColors.black.withOpacity(0.3),
-                            blurRadius: 20,
-                            offset: const Offset(0, 10),
-                          )
-                        ],
+                  const Spacer(flex: 1),
+
+                  // Artwork with glow effect
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF6366F1).withOpacity(0.3),
+                          blurRadius: 40,
+                          spreadRadius: 5,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: AspectRatio(
+                      aspectRatio: 1,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: const Color(0x33FFFFFF), width: 2),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: song.artworkPath != null
+                            ? Image.file(File(song.artworkPath!), fit: BoxFit.cover)
+                            : Container(
+                                color: const Color(0xFF1E1B4B),
+                                child: const Icon(CupertinoIcons.music_note, size: 100, color: CupertinoColors.systemGrey),
+                              ),
                       ),
-                      clipBehavior: Clip.antiAlias,
-                      child: song.artworkPath != null
-                          ? Image.file(File(song.artworkPath!), fit: BoxFit.cover)
-                          : const Icon(CupertinoIcons.music_note, size: 100, color: CupertinoColors.systemGrey),
                     ),
                   ),
-                  const SizedBox(height: 48),
                   
+                  const SizedBox(height: 40),
+
                   // Title & Artist
                   Text(
                     song.title,
-                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: CupertinoColors.white),
                     textAlign: TextAlign.center,
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    song.artist,
-                    style: const TextStyle(fontSize: 18, color: CupertinoColors.systemGrey),
+                    song.artist.toUpperCase(),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: CupertinoColors.white.withOpacity(0.5), letterSpacing: 1.5),
                     textAlign: TextAlign.center,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  
+
                   const SizedBox(height: 32),
-                  
-                  // Progress Bar (Mocked for scaffolding, would sync with engine in real implementation)
+
+                  // Progress Bar
                   CupertinoSlider(
-                    value: provider.state.currentPosition,
+                    value: provider.state.currentPosition.clamp(0.0, song.duration > 0 ? song.duration : 1.0),
                     max: song.duration > 0 ? song.duration : 1.0,
+                    activeColor: const Color(0xFF818CF8),
+                    thumbColor: CupertinoColors.white,
                     onChanged: (val) {
-                       // Seek functionality would go here
+                       // Seek functionality placeholder
                     },
                   ),
                   
+                  const SizedBox(height: 24),
+
                   // Controls
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -86,36 +106,54 @@ class NowPlayingScreen extends StatelessWidget {
                         onPressed: provider.toggleShuffle,
                         child: Icon(
                           CupertinoIcons.shuffle,
-                          color: provider.state.shuffleEnabled ? CupertinoColors.activeBlue : CupertinoColors.systemGrey,
-                          size: 28,
+                          color: provider.state.shuffleEnabled ? const Color(0xFF818CF8) : CupertinoColors.systemGrey,
+                          size: 24,
                         ),
                       ),
                       CupertinoButton(
                         padding: EdgeInsets.zero,
                         onPressed: provider.previous,
-                        child: const Icon(CupertinoIcons.backward_fill, size: 40, color: CupertinoColors.white),
+                        child: const Icon(CupertinoIcons.backward_fill, size: 36, color: CupertinoColors.white),
                       ),
-                      CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        onPressed: provider.isPlaying ? provider.pause : provider.resume,
-                        child: Icon(
-                          provider.isPlaying ? CupertinoIcons.pause_fill : CupertinoIcons.play_fill,
-                          size: 60,
-                          color: CupertinoColors.white,
+                      // Large Play/Pause with glow
+                      Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF6366F1), Color(0xFF818CF8)],
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF6366F1).withOpacity(0.5),
+                              blurRadius: 20,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
+                        child: CupertinoButton(
+                          padding: const EdgeInsets.all(16),
+                          onPressed: provider.isPlaying ? provider.pause : provider.resume,
+                          child: Icon(
+                            provider.isPlaying ? CupertinoIcons.pause_fill : CupertinoIcons.play_fill,
+                            size: 40,
+                            color: CupertinoColors.white,
+                          ),
                         ),
                       ),
                       CupertinoButton(
                         padding: EdgeInsets.zero,
                         onPressed: provider.next,
-                        child: const Icon(CupertinoIcons.forward_fill, size: 40, color: CupertinoColors.white),
+                        child: const Icon(CupertinoIcons.forward_fill, size: 36, color: CupertinoColors.white),
                       ),
                       CupertinoButton(
                         padding: EdgeInsets.zero,
-                        onPressed: () {}, // Repeat placeholder
-                        child: const Icon(CupertinoIcons.repeat, size: 28, color: CupertinoColors.systemGrey),
+                        onPressed: () {},
+                        child: const Icon(CupertinoIcons.repeat, size: 24, color: CupertinoColors.systemGrey),
                       ),
                     ],
                   ),
+
+                  const Spacer(flex: 2),
                 ],
               ),
             );
