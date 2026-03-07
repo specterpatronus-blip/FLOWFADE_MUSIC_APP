@@ -8,54 +8,75 @@ import '../audio/audio_handler.dart';
 import '../services/database_helper.dart';
 
 class FileImportUtils {
-  static Future<void> importMusicFiles(BuildContext context) async {
+  static Future<List<Song>> importMusicFiles(BuildContext context) async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['mp3', 'm4a', 'wav', 'flac'],
       allowMultiple: true,
     );
 
-    if (result == null || result.files.isEmpty) return;
+    if (result == null || result.files.isEmpty) return [];
 
     final docDir = await getApplicationDocumentsDirectory();
+    final audioDir = Directory('${docDir.path}/audio');
+    if (!await audioDir.exists()) {
+      await audioDir.create(recursive: true);
+    }
+    
     final audioHandler = AudioHandler();
-    final db = DatabaseHelper.instance;
+    List<Song> importedSongs = [];
 
     for (var file in result.files) {
       if (file.path == null) continue;
 
       final originalFile = File(file.path!);
       final filename = file.name;
-      final newPath = '${docDir.path}/$filename';
+      final extension = filename.split('.').last;
+      
+      final String id = const Uuid().v4();
+      final newPath = '${audioDir.path}/$id.$extension';
 
-      // Copy to sandbox if not exists
-      if (!File(newPath).existsSync()) {
-        await originalFile.copy(newPath);
-      }
+      // Copy to sandbox destination
+      await originalFile.copy(newPath);
 
-      // Extract metadata
+      // Extract metadata natively
       final metadata = await audioHandler.extractMetadata(newPath);
 
-      final String title = metadata['title'] ?? filename.split('.').first;
-      final String artist = metadata['artist'] ?? 'Unknown Artist';
-      final double duration = metadata['duration'] ?? 0.0;
+      final String actualTitle = metadata['title'] ?? filename.split('.').first;
+      final String actualArtist = metadata['artist'] ?? 'Unknown Artist';
+      
+      // Parse duration safely from different formats
+      double duration = 0.0;
+      if (metadata['duration'] != null) {
+        if (metadata['duration'] is int) {
+            duration = (metadata['duration'] as int).toDouble();
+        } else if (metadata['duration'] is double) {
+            duration = metadata['duration'] as double;
+        }
+      }
+
       final String? artworkPath = metadata['artworkPath'];
 
-      final String id = const Uuid().v4();
+      // We mark isMetadataEdited as true if core metadata was missing,
+      // so the UI knows to intercept this song before DB saving.
+      final bool needsEdit = (metadata['title'] == null || metadata['artist'] == null);
 
       final song = Song(
         id: id,
         filePath: newPath,
         originalFileName: filename,
-        title: title,
-        artist: artist,
+        title: actualTitle,
+        artist: actualArtist,
         artworkPath: artworkPath,
         duration: duration,
         dateAdded: DateTime.now(),
-        isMetadataEdited: metadata['title'] == null, 
+        // We temporarily hijack this flag to signal the UI it needs editing
+        isMetadataEdited: needsEdit, 
       );
 
-      await db.createSong(song);
+      importedSongs.add(song);
     }
+    
+    return importedSongs;
   }
 }

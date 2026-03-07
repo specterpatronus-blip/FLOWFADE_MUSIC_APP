@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 import '../../state/playback_provider.dart';
 import '../../utils/file_import_utils.dart';
 import '../../models/song.dart';
+import '../../services/database_helper.dart';
 import 'now_playing_screen.dart';
+import 'metadata_editor_screen.dart';
 import '../widgets/mini_player.dart';
 
 class LibraryScreen extends StatefulWidget {
@@ -24,8 +26,31 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   Future<void> _importMusic() async {
-    await FileImportUtils.importMusicFiles(context);
-    if (!mounted) return;
+    final importedSongs = await FileImportUtils.importMusicFiles(context);
+    if (!mounted || importedSongs.isEmpty) return;
+
+    final db = DatabaseHelper.instance;
+    bool needsReload = false;
+
+    for (var song in importedSongs) {
+      if (song.isMetadataEdited) {
+        // We hijacked this flag to mean "needs Edit" for new imports
+        final songToEdit = song.copyWith(isMetadataEdited: false);
+        final result = await Navigator.of(context).push(
+          CupertinoPageRoute(
+            builder: (_) => MetadataEditorScreen(song: songToEdit, isNewImport: true),
+          ),
+        );
+        if (result == true) {
+            needsReload = true;
+        }
+      } else {
+        await db.createSong(song);
+        needsReload = true;
+      }
+    }
+
+    if (!mounted || !needsReload) return;
     context.read<PlaybackProvider>().loadLibrary();
   }
 

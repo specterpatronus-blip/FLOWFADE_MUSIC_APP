@@ -4,7 +4,8 @@ import '../../services/database_helper.dart';
 
 class MetadataEditorScreen extends StatefulWidget {
   final Song song;
-  const MetadataEditorScreen({super.key, required this.song});
+  final bool isNewImport;
+  const MetadataEditorScreen({super.key, required this.song, this.isNewImport = false});
 
   @override
   State<MetadataEditorScreen> createState() => _MetadataEditorScreenState();
@@ -33,9 +34,15 @@ class _MetadataEditorScreenState extends State<MetadataEditorScreen> {
     final updatedSong = widget.song.copyWith(
       title: _titleController.text.trim(),
       artist: _artistController.text.trim(),
-      isMetadataEdited: true,
+      isMetadataEdited: true, // We mark as true so we know user touched it
     );
-    await _db.updateSong(updatedSong);
+    
+    if (widget.isNewImport) {
+        await _db.createSong(updatedSong);
+    } else {
+        await _db.updateSong(updatedSong);
+    }
+    
     if (!mounted) return;
     Navigator.pop(context, true); // true indicates successful change
   }
