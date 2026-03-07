@@ -3,7 +3,6 @@ import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import '../../state/playback_provider.dart';
-import '../../utils/file_import_utils.dart';
 import '../../models/song.dart';
 import '../../services/database_helper.dart';
 import 'now_playing_screen.dart';
@@ -24,35 +23,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<PlaybackProvider>().loadLibrary();
     });
-  }
-
-  Future<void> _importMusic() async {
-    final importedSongs = await FileImportUtils.importMusicFiles(context);
-    if (!mounted || importedSongs.isEmpty) return;
-
-    final db = DatabaseHelper.instance;
-    bool needsReload = false;
-
-    for (var song in importedSongs) {
-      if (song.isMetadataEdited) {
-        // We hijacked this flag to mean "needs Edit" for new imports
-        final songToEdit = song.copyWith(isMetadataEdited: false);
-        final result = await Navigator.of(context).push(
-          CupertinoPageRoute(
-            builder: (_) => MetadataEditorScreen(song: songToEdit, isNewImport: true),
-          ),
-        );
-        if (result == true) {
-            needsReload = true;
-        }
-      } else {
-        await db.createSong(song);
-        needsReload = true;
-      }
-    }
-
-    if (!mounted || !needsReload) return;
-    context.read<PlaybackProvider>().loadLibrary();
   }
 
   void _showContextMenu(BuildContext context, Song song) {
@@ -100,15 +70,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
       backgroundColor: const Color(0x00000000), // Transparent
-      navigationBar: CupertinoNavigationBar(
-        backgroundColor: const Color(0x00000000), // Transparent
+      navigationBar: const CupertinoNavigationBar(
+        backgroundColor: Color(0x00000000), // Transparent
         border: null,
-        middle: const Text('Library', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: CupertinoColors.white)),
-        trailing: CupertinoButton(
-          padding: EdgeInsets.zero,
-          onPressed: _importMusic,
-          child: const Icon(CupertinoIcons.add, color: CupertinoColors.white),
-        ),
+        middle: Text('Library', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: CupertinoColors.white)),
       ),
       child: SafeArea(
         child: Column(

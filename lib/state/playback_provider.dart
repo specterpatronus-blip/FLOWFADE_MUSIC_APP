@@ -4,6 +4,7 @@ import '../models/song.dart';
 import '../models/playback_state.dart';
 import '../services/database_helper.dart';
 import '../audio/audio_handler.dart';
+import '../utils/asset_import_utils.dart';
 
 class PlaybackProvider extends ChangeNotifier {
   final AudioHandler _audioHandler = AudioHandler();
@@ -32,7 +33,13 @@ class PlaybackProvider extends ChangeNotifier {
   }
 
   Future<void> _init() async {
+    // 1. Unpack assets on first run before reading from SQLite
+    await AssetImportUtils.deployBundledAssets();
+    
+    // 2. Load the library into memory
     await loadLibrary();
+    
+    // 3. Restore last playback state
     final savedState = await _db.readPlaybackState();
     if (savedState != null) {
       _state = savedState;
