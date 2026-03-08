@@ -1,15 +1,19 @@
-import 'dart:math';
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import '../models/song.dart';
-import '../models/playback_state.dart';
-import '../services/database_helper.dart';
+import '../audio/audio_crossfade_controller.dart';
 import '../audio/audio_handler.dart';
+import '../models/playback_state.dart';
+import '../models/song.dart';
+import '../services/database_helper.dart';
 import '../utils/asset_import_utils.dart';
 
 class PlaybackProvider extends ChangeNotifier {
+  static const List<double> _crossfadeOptions = [0, 1, 3, 5, 8, 12];
+
   final AudioHandler _audioHandler = AudioHandler();
   final DatabaseHelper _db = DatabaseHelper.instance;
+  late final AudioCrossfadeController _crossfadeController;
 
   List<Song> _library = [];
   List<Song> get library => _library;
@@ -17,39 +21,94 @@ class PlaybackProvider extends ChangeNotifier {
   PlaybackStateModel _state = PlaybackStateModel(queue: []);
   PlaybackStateModel get state => _state;
 
+  bool _isPlaying = false;
+  bool get isPlaying => _isPlaying;
+
+  Duration _currentPosition = Duration.zero;
+  Duration get currentPosition => _currentPosition;
+
+  Duration _totalDuration = Duration.zero;
+  Duration get totalDuration => _totalDuration;
+
+  Duration _bufferedPosition = Duration.zero;
+  Duration get bufferedPosition => _bufferedPosition;
+
+  String? _lastError;
+  String? get lastError => _lastError;
+
   Song? get currentSong {
     if (_state.currentSongId == null) return null;
     try {
-      return _library.firstWhere((s) => s.id == _state.currentSongId);
+      return _library.firstWhere((song) => song.id == _state.currentSongId);
     } catch (_) {
       return null;
     }
   }
 
-  bool _isPlaying = false;
-  bool get isPlaying => _isPlaying;
-
-  String? _lastError;
-  String? get lastError => _lastError;
-
   PlaybackProvider() {
+    _crossfadeController = AudioCrossfadeController(
+      onTrackChanged: (song, _) {
+        _state = _state.copyWith(
+          currentSongId: song.id,
+          currentPosition: 0.0,
+        );
+        _currentPosition = Duration.zero;
+        _bufferedPosition = Duration.zero;
+        unawaited(_db.savePlaybackState(_state));
+        notifyListeners();
+      },
+      onPositionChanged: (position) {
+        _currentPosition = position;
+        _state = _state.copyWith(
+          currentPosition: position.inMilliseconds / 1000.0,
+        );
+        notifyListeners();
+      },
+      onDurationChanged: (duration) {
+        _totalDuration = duration;
+        notifyListeners();
+      },
+      onBufferedChanged: (buffered) {
+        _bufferedPosition = buffered;
+        notifyListeners();
+      },
+      onPlayingChanged: (playing) {
+        _isPlaying = playing;
+        notifyListeners();
+      },
+      onError: (message) {
+        _lastError = message;
+        notifyListeners();
+      },
+    );
     _init();
   }
 
   Future<void> _init() async {
-    // 1. Unpack assets on first run before reading from SQLite
     await AssetImportUtils.deployBundledAssets();
-    
-    // 2. Load the library into memory
     await loadLibrary();
-    
-    // 3. Restore last playback state
+
     final savedState = await _db.readPlaybackState();
     if (savedState != null) {
-      _state = savedState;
-      _audioHandler.setCrossfadeDuration(_state.crossfadeDuration);
-      notifyListeners();
+      final normalizedCrossfade = _normalizeCrossfadeDuration(savedState.crossfadeDuration);
+      _state = savedState.copyWith(
+        crossfadeDuration: normalizedCrossfade,
+      );
+      if (normalizedCrossfade != savedState.crossfadeDuration) {
+        await _db.savePlaybackState(_state);
+      }
+    } else {
+      _state = _state.copyWith(crossfadeDuration: 5.0);
     }
+
+    _audioHandler.setNativeCommandHandler(
+      onNextTrack: () => next(manual: true),
+      onPreviousTrack: previous,
+    );
+
+    await _crossfadeController.setCrossfadeDuration(_state.crossfadeDuration);
+    _crossfadeController.setShuffleEnabled(_state.shuffleEnabled);
+    notifyListeners();
   }
 
   Future<void> loadLibrary() async {
@@ -60,118 +119,123 @@ class PlaybackProvider extends ChangeNotifier {
   Future<bool> playSong(Song song, {List<Song>? contextQueue}) async {
     _lastError = null;
 
-    if (contextQueue != null) {
-      _state = _state.copyWith(
-        queue: contextQueue.map((s) => s.id).toList(),
-      );
-    }
-
-    _state = _state.copyWith(
-      currentSongId: song.id,
-      currentPosition: 0.0,
-    );
-
-    if (!File(song.filePath).existsSync()) {
-      _isPlaying = false;
-      _lastError = 'Audio file not found on disk.';
+    final queueSongs = _buildQueueSongs(contextQueue: contextQueue);
+    if (queueSongs.isEmpty) {
+      _lastError = 'No hay canciones disponibles para reproducir.';
       notifyListeners();
       return false;
     }
 
-    _isPlaying = false;
-    notifyListeners();
-
-    await _db.savePlaybackState(_state);
-    final started = await _audioHandler.play(song.filePath);
-
-    _isPlaying = started;
-    if (!started) {
-      _lastError = 'iOS audio engine failed to start playback.';
+    final startIndex = queueSongs.indexWhere((s) => s.id == song.id);
+    if (startIndex == -1) {
+      _lastError = 'La canción seleccionada no está en la cola actual.';
+      notifyListeners();
+      return false;
     }
+
+    if (!File(song.filePath).existsSync()) {
+      _lastError = 'Audio file not found on disk.';
+      _isPlaying = false;
+      notifyListeners();
+      return false;
+    }
+
+    _state = _state.copyWith(
+      queue: queueSongs.map((s) => s.id).toList(),
+      currentSongId: song.id,
+      currentPosition: 0.0,
+    );
+    _currentPosition = Duration.zero;
+    _totalDuration = Duration.zero;
+    _bufferedPosition = Duration.zero;
+    await _db.savePlaybackState(_state);
+
+    await _crossfadeController.setCrossfadeDuration(_state.crossfadeDuration);
+    _crossfadeController.setShuffleEnabled(_state.shuffleEnabled);
+    await _crossfadeController.setPlaylist(
+      queueSongs,
+      startIndex: startIndex,
+      autoplay: true,
+    );
+
+    _isPlaying = _crossfadeController.isPlaying;
     notifyListeners();
-    return started;
+    return _isPlaying;
   }
 
   Future<void> pause() async {
-    _isPlaying = false;
-    notifyListeners();
-    await _audioHandler.pause();
-    // In a real implementation we would get the position from the native engine
+    await _crossfadeController.pauseWithFade();
   }
 
   Future<void> resume() async {
-    if (currentSong == null) return;
     _lastError = null;
-    notifyListeners();
-    final resumed = await _audioHandler.resume();
-    _isPlaying = resumed;
-    if (!resumed) {
-      _lastError = 'Could not resume playback on iOS.';
-    }
-    notifyListeners();
+    await _crossfadeController.resumeWithFade();
   }
 
-  Future<void> next() async {
-    if (_state.queue.isEmpty || currentSong == null) return;
-    
-    int currentIndex = _state.queue.indexOf(currentSong!.id);
-    if (currentIndex == -1 || currentIndex == _state.queue.length - 1) {
-       // Stop if it's the end of the queue, or loop back.
-       if (_state.queue.isNotEmpty) {
-           _playNextFromId(_state.queue.first);
-       }
-       return;
-    }
-
-    if (_state.shuffleEnabled) {
-      _playNextShuffle(currentIndex);
-    } else {
-      _playNextFromId(_state.queue[currentIndex + 1]);
-    }
+  Future<void> next({bool manual = true}) async {
+    await _crossfadeController.next(manual: manual);
   }
 
   Future<void> previous() async {
-     if (_state.queue.isEmpty || currentSong == null) return;
-     int currentIndex = _state.queue.indexOf(currentSong!.id);
-     
-     if (currentIndex <= 0) {
-        // Go to start
-        if (_state.queue.isNotEmpty) {
-            _playNextFromId(_state.queue.last);
-        }
-        return;
-     }
-
-     _playNextFromId(_state.queue[currentIndex - 1]);
+    await _crossfadeController.previous();
   }
 
-  void _playNextFromId(String id) {
-     final song = _library.firstWhere((s) => s.id == id, orElse: () => _library.first);
-     playSong(song);
-  }
-
-  void _playNextShuffle(int currentIndex) {
-      // Basic shuffle: pick a random song that is not the current one.
-      // Advanced: avoid recent artists. Keeping it simple here for scaffolding.
-      final random = Random();
-      int nextIndex;
-      do {
-        nextIndex = random.nextInt(_state.queue.length);
-      } while (nextIndex == currentIndex && _state.queue.length > 1);
-      
-      _playNextFromId(_state.queue[nextIndex]);
+  Future<void> seek(Duration position) async {
+    await _crossfadeController.seek(position);
   }
 
   Future<void> toggleShuffle() async {
     _state = _state.copyWith(shuffleEnabled: !_state.shuffleEnabled);
-    notifyListeners();
+    _crossfadeController.setShuffleEnabled(_state.shuffleEnabled);
     await _db.savePlaybackState(_state);
+    notifyListeners();
   }
 
   Future<void> setCrossfadeDuration(double duration) async {
-    _state = _state.copyWith(crossfadeDuration: duration);
-    notifyListeners();
-    await _audioHandler.setCrossfadeDuration(duration);
+    final normalized = _normalizeCrossfadeDuration(duration);
+    _state = _state.copyWith(crossfadeDuration: normalized);
+    await _crossfadeController.setCrossfadeDuration(normalized);
     await _db.savePlaybackState(_state);
+    notifyListeners();
+  }
+
+  List<Song> _buildQueueSongs({List<Song>? contextQueue}) {
+    if (contextQueue != null && contextQueue.isNotEmpty) {
+      return List<Song>.from(contextQueue);
+    }
+
+    if (_state.queue.isNotEmpty) {
+      final mapped = _state.queue
+          .map((id) => _library.where((song) => song.id == id))
+          .where((matches) => matches.isNotEmpty)
+          .map((matches) => matches.first)
+          .toList();
+      if (mapped.isNotEmpty) return mapped;
+    }
+
+    return List<Song>.from(_library);
+  }
+
+  double _normalizeCrossfadeDuration(double duration) {
+    if (_crossfadeOptions.contains(duration)) {
+      return duration;
+    }
+
+    double best = _crossfadeOptions.first;
+    double minDistance = (duration - best).abs();
+    for (final option in _crossfadeOptions) {
+      final distance = (duration - option).abs();
+      if (distance < minDistance) {
+        minDistance = distance;
+        best = option;
+      }
+    }
+    return best;
+  }
+
+  @override
+  void dispose() {
+    unawaited(_crossfadeController.dispose());
+    super.dispose();
   }
 }

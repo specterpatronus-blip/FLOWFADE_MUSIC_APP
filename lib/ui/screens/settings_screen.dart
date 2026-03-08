@@ -5,6 +5,13 @@ import '../../state/playback_provider.dart';
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
+  static const List<double> _crossfadeOptions = [0, 1, 3, 5, 8, 12];
+
+  String _labelForDuration(double duration) {
+    if (duration <= 0) return 'OFF';
+    return '${duration.toStringAsFixed(0)}s';
+  }
+
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
@@ -26,16 +33,36 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 CupertinoListTile(
                   title: const Text('Crossfade Duration'),
-                  subtitle: Text('${provider.state.crossfadeDuration.toStringAsFixed(1)}s'),
-                  additionalInfo: SizedBox(
-                    width: 150,
-                    child: CupertinoSlider(
-                      value: provider.state.crossfadeDuration,
-                      min: 1.0,
-                      max: 12.0,
-                      divisions: 11,
-                      onChanged: provider.setCrossfadeDuration,
-                    ),
+                  subtitle: Text(_labelForDuration(provider.state.crossfadeDuration)),
+                  additionalInfo: CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    onPressed: () async {
+                      await showCupertinoModalPopup<void>(
+                        context: context,
+                        builder: (sheetContext) => CupertinoActionSheet(
+                          title: const Text('Crossfade'),
+                          message: const Text('Select transition duration'),
+                          actions: _crossfadeOptions
+                              .map(
+                                (option) => CupertinoActionSheetAction(
+                                  isDefaultAction: provider.state.crossfadeDuration == option,
+                                  onPressed: () async {
+                                    Navigator.of(sheetContext).pop();
+                                    await provider.setCrossfadeDuration(option);
+                                  },
+                                  child: Text(_labelForDuration(option)),
+                                ),
+                              )
+                              .toList(),
+                          cancelButton: CupertinoActionSheetAction(
+                            isDefaultAction: true,
+                            onPressed: () => Navigator.of(sheetContext).pop(),
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                      );
+                    },
+                    child: const Icon(CupertinoIcons.chevron_down_circle),
                   ),
                 ),
                 CupertinoListTile(

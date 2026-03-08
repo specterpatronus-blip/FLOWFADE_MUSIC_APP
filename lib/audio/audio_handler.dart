@@ -4,6 +4,22 @@ import 'package:flutter/cupertino.dart';
 class AudioHandler {
   static const MethodChannel _channel = MethodChannel('com.flowfade/audio');
 
+  void setNativeCommandHandler({
+    Future<void> Function()? onNextTrack,
+    Future<void> Function()? onPreviousTrack,
+  }) {
+    _channel.setMethodCallHandler((call) async {
+      switch (call.method) {
+        case 'nextTrack':
+          await onNextTrack?.call();
+          break;
+        case 'previousTrack':
+          await onPreviousTrack?.call();
+          break;
+      }
+    });
+  }
+
   Future<bool> play(String filePath) async {
     debugPrint('AudioHandler: play() called with: $filePath');
     try {

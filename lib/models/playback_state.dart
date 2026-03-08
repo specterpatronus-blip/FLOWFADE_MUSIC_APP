@@ -10,7 +10,7 @@ class PlaybackStateModel {
     this.currentPosition = 0.0,
     required this.queue,
     this.shuffleEnabled = false,
-    this.crossfadeDuration = 6.0,
+    this.crossfadeDuration = 5.0,
   });
 
   Map<String, dynamic> toMap() {
@@ -30,7 +30,7 @@ class PlaybackStateModel {
       currentPosition: map['currentPosition'] ?? 0.0,
       queue: (map['queue'] as String? ?? '').split(',').where((e) => e.isNotEmpty).toList(),
       shuffleEnabled: map['shuffleEnabled'] == 1,
-      crossfadeDuration: map['crossfadeDuration'] ?? 6.0,
+      crossfadeDuration: map['crossfadeDuration'] ?? 5.0,
     );
   }
 

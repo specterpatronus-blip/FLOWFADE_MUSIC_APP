@@ -4,8 +4,23 @@ import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import '../../state/playback_provider.dart';
 
-class NowPlayingScreen extends StatelessWidget {
+class NowPlayingScreen extends StatefulWidget {
   const NowPlayingScreen({super.key});
+
+  @override
+  State<NowPlayingScreen> createState() => _NowPlayingScreenState();
+}
+
+class _NowPlayingScreenState extends State<NowPlayingScreen> {
+  bool _isSeeking = false;
+  double _seekValue = 0.0;
+
+  String _formatDuration(Duration duration) {
+    final totalSeconds = duration.inSeconds;
+    final minutes = (totalSeconds ~/ 60).toString().padLeft(2, '0');
+    final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -85,13 +100,72 @@ class NowPlayingScreen extends StatelessWidget {
                   const SizedBox(height: 32),
 
                   // Progress Bar
-                  CupertinoSlider(
-                    value: provider.state.currentPosition.clamp(0.0, song.duration > 0 ? song.duration : 1.0),
-                    max: song.duration > 0 ? song.duration : 1.0,
-                    activeColor: const Color(0xFF818CF8),
-                    thumbColor: CupertinoColors.white,
-                    onChanged: (val) {
-                       // Seek functionality placeholder
+                  Builder(
+                    builder: (context) {
+                      final fallbackTotal = Duration(milliseconds: (song.duration * 1000).round());
+                      final totalDuration = provider.totalDuration > Duration.zero
+                          ? provider.totalDuration
+                          : fallbackTotal;
+                      final livePosition = provider.currentPosition;
+                      final shownPosition = _isSeeking
+                          ? Duration(milliseconds: _seekValue.round())
+                          : livePosition;
+
+                      final maxMs = totalDuration.inMilliseconds > 0 ? totalDuration.inMilliseconds.toDouble() : 1.0;
+                      final clampedShown = shownPosition.inMilliseconds.clamp(0, maxMs.round()).toDouble();
+
+                      return Column(
+                        children: [
+                          CupertinoSlider(
+                            value: clampedShown,
+                            max: maxMs,
+                            activeColor: const Color(0xFF818CF8),
+                            thumbColor: CupertinoColors.white,
+                            onChangeStart: (val) {
+                              setState(() {
+                                _isSeeking = true;
+                                _seekValue = val;
+                              });
+                            },
+                            onChanged: (val) {
+                              setState(() {
+                                _seekValue = val;
+                              });
+                            },
+                            onChangeEnd: (val) async {
+                              await provider.seek(Duration(milliseconds: val.round()));
+                              if (!mounted) return;
+                              setState(() {
+                                _isSeeking = false;
+                              });
+                            },
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  _formatDuration(shownPosition),
+                                  style: TextStyle(
+                                    color: CupertinoColors.white.withOpacity(0.75),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                Text(
+                                  _formatDuration(totalDuration),
+                                  style: TextStyle(
+                                    color: CupertinoColors.white.withOpacity(0.75),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
                     },
                   ),
                   
