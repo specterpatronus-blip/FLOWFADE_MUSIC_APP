@@ -4,9 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import '../../state/playback_provider.dart';
 import '../../models/song.dart';
-import '../../services/database_helper.dart';
 import 'now_playing_screen.dart';
-import 'metadata_editor_screen.dart';
 import '../widgets/mini_player.dart';
 
 class LibraryScreen extends StatefulWidget {
@@ -79,15 +77,40 @@ class _LibraryScreenState extends State<LibraryScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Padding(
-              padding: EdgeInsets.only(left: 20.0, top: 16.0, bottom: 8.0),
-              child: Text(
-                'Recent Discoveries',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w600,
-                  color: CupertinoColors.white,
-                  letterSpacing: 0.5,
+            Consumer<PlaybackProvider>(
+              builder: (context, provider, _) => Padding(
+                padding: const EdgeInsets.only(left: 20.0, right: 20.0, top: 16.0, bottom: 8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Recent Discoveries',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                        color: CupertinoColors.white,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(999),
+                        color: const Color(0x1FFFFFFF),
+                        border: Border.all(color: const Color(0x22FFFFFF)),
+                      ),
+                      child: Text(
+                        '${provider.library.length} tracks in your device library',
+                        style: const TextStyle(
+                          color: Color(0xB3FFFFFF),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -105,16 +128,39 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       final song = provider.library[index];
                       return GestureDetector(
                         onLongPress: () => _showContextMenu(context, song),
-                        onTap: () {
-                          provider.playSong(song, contextQueue: provider.library);
-                          Navigator.of(context).push(CupertinoPageRoute(builder: (_) => const NowPlayingScreen()));
+                        onTap: () async {
+                          final started = await provider.playSong(song, contextQueue: provider.library);
+                          if (!context.mounted) return;
+
+                          if (started) {
+                            Navigator.of(context).push(CupertinoPageRoute(builder: (_) => const NowPlayingScreen()));
+                            return;
+                          }
+
+                          await showCupertinoDialog<void>(
+                            context: context,
+                            builder: (ctx) => CupertinoAlertDialog(
+                              title: const Text('Playback Error'),
+                              content: Text(provider.lastError ?? 'Unable to play this track on iOS.'),
+                              actions: [
+                                CupertinoDialogAction(
+                                  onPressed: () => Navigator.of(ctx).pop(),
+                                  child: const Text('OK'),
+                                ),
+                              ],
+                            ),
+                          );
                         },
                         child: Container(
                           margin: const EdgeInsets.only(bottom: 12.0),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(20),
-                            color: const Color(0x1AFFFFFF), // Semi-transparent white
-                            border: Border.all(color: const Color(0x1AFFFFFF), width: 1),
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0x29FFFFFF), Color(0x14FFFFFF)],
+                            ),
+                            border: Border.all(color: const Color(0x2FFFFFFF), width: 1),
                           ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(20),

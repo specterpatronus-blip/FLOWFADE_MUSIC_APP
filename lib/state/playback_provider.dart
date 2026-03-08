@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../models/song.dart';
 import '../models/playback_state.dart';
@@ -28,6 +29,9 @@ class PlaybackProvider extends ChangeNotifier {
   bool _isPlaying = false;
   bool get isPlaying => _isPlaying;
 
+  String? _lastError;
+  String? get lastError => _lastError;
+
   PlaybackProvider() {
     _init();
   }
@@ -53,7 +57,9 @@ class PlaybackProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> playSong(Song song, {List<Song>? contextQueue}) async {
+  Future<bool> playSong(Song song, {List<Song>? contextQueue}) async {
+    _lastError = null;
+
     if (contextQueue != null) {
       _state = _state.copyWith(
         queue: contextQueue.map((s) => s.id).toList(),
@@ -64,12 +70,26 @@ class PlaybackProvider extends ChangeNotifier {
       currentSongId: song.id,
       currentPosition: 0.0,
     );
-    
-    _isPlaying = true;
+
+    if (!File(song.filePath).existsSync()) {
+      _isPlaying = false;
+      _lastError = 'Audio file not found on disk.';
+      notifyListeners();
+      return false;
+    }
+
+    _isPlaying = false;
     notifyListeners();
-    
+
     await _db.savePlaybackState(_state);
-    await _audioHandler.play(song.filePath);
+    final started = await _audioHandler.play(song.filePath);
+
+    _isPlaying = started;
+    if (!started) {
+      _lastError = 'iOS audio engine failed to start playback.';
+    }
+    notifyListeners();
+    return started;
   }
 
   Future<void> pause() async {
@@ -81,9 +101,14 @@ class PlaybackProvider extends ChangeNotifier {
 
   Future<void> resume() async {
     if (currentSong == null) return;
-    _isPlaying = true;
+    _lastError = null;
     notifyListeners();
-    await _audioHandler.resume();
+    final resumed = await _audioHandler.resume();
+    _isPlaying = resumed;
+    if (!resumed) {
+      _lastError = 'Could not resume playback on iOS.';
+    }
+    notifyListeners();
   }
 
   Future<void> next() async {
