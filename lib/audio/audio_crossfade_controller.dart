@@ -44,6 +44,7 @@ class AudioCrossfadeController {
   bool _isDisposed = false;
   bool _isTransitioning = false;
   bool _isPlaying = false;
+  bool _isHandlingCompletion = false;
 
   double _crossfadeDuration = 5.0;
 
@@ -197,12 +198,7 @@ class AudioCrossfadeController {
 
     _activePlayerStateSub = _activePlayer.playerStateStream.listen((state) {
       if (state.processingState == ProcessingState.completed && !_isTransitioning) {
-        final nextIndex = _resolveNextIndex();
-        if (nextIndex != null) {
-          unawaited(next(manual: false));
-        } else {
-          _setPlaying(false);
-        }
+        unawaited(_handleTrackCompletion());
       }
     });
 
@@ -296,6 +292,29 @@ class AudioCrossfadeController {
       onError?.call('No se pudo avanzar a la siguiente pista: $e');
     } finally {
       _isTransitioning = false;
+    }
+  }
+
+  Future<void> _handleTrackCompletion() async {
+    if (_isDisposed || _isTransitioning || _isHandlingCompletion) return;
+
+    final nextIndex = _resolveNextIndex();
+    if (nextIndex == null) {
+      _setPlaying(false);
+      return;
+    }
+
+    _isHandlingCompletion = true;
+    final previousIndex = _currentIndex;
+    try {
+      await next(manual: false);
+      if (_currentIndex == previousIndex) {
+        await _advanceWithoutFade(nextIndex);
+      }
+    } catch (_) {
+      await _advanceWithoutFade(nextIndex);
+    } finally {
+      _isHandlingCompletion = false;
     }
   }
 
