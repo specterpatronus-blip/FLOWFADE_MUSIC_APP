@@ -5,7 +5,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../models/song.dart';
 import '../audio/audio_handler.dart';
-import '../services/database_helper.dart';
 
 class FileImportUtils {
   static Future<List<Song>> importMusicFiles(BuildContext context) async {

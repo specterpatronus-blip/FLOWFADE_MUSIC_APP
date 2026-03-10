@@ -19,17 +19,21 @@ class MiniPlayerWidget extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
           child: GestureDetector(
             onTap: () {
-              Navigator.of(context).push(CupertinoPageRoute(builder: (_) => const NowPlayingScreen()));
+              Navigator.of(context).push(
+                CupertinoPageRoute(builder: (_) => const NowPlayingScreen()),
+              );
             },
             child: Container(
               height: 64,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(32),
-                color: const Color(0x2AFFFFFF), // Slightly more opaque for the mini player
+                color: const Color(
+                  0x2AFFFFFF,
+                ), // Slightly more opaque for the mini player
                 border: Border.all(color: const Color(0x33FFFFFF), width: 1.5),
                 boxShadow: [
                   BoxShadow(
-                    color: CupertinoColors.black.withOpacity(0.5),
+                    color: CupertinoColors.black.withValues(alpha: 0.5),
                     blurRadius: 20,
                     offset: const Offset(0, 10),
                   ),
@@ -48,22 +52,31 @@ class MiniPlayerWidget extends StatelessWidget {
                         height: 48,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: CupertinoColors.black.withOpacity(0.4),
+                          color: CupertinoColors.black.withValues(alpha: 0.4),
                           boxShadow: [
-                             BoxShadow(
-                               color: CupertinoColors.black.withOpacity(0.3),
-                               blurRadius: 8,
-                               offset: const Offset(0, 4),
-                             )
-                          ]
+                            BoxShadow(
+                              color: CupertinoColors.black.withValues(
+                                alpha: 0.3,
+                              ),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
                         clipBehavior: Clip.hardEdge,
                         child: song.artworkPath != null
-                            ? Image.file(File(song.artworkPath!), fit: BoxFit.cover)
-                            : const Icon(CupertinoIcons.music_note, color: CupertinoColors.systemGrey, size: 24),
+                            ? Image.file(
+                                File(song.artworkPath!),
+                                fit: BoxFit.cover,
+                              )
+                            : const Icon(
+                                CupertinoIcons.music_note,
+                                color: CupertinoColors.systemGrey,
+                                size: 24,
+                              ),
                       ),
                       const SizedBox(width: 16),
-                      
+
                       // Track Info
                       Expanded(
                         child: Column(
@@ -74,25 +87,38 @@ class MiniPlayerWidget extends StatelessWidget {
                               song.title,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontWeight: FontWeight.w600, color: CupertinoColors.white, fontSize: 16),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: CupertinoColors.white,
+                                fontSize: 16,
+                              ),
                             ),
                             const SizedBox(height: 2),
                             Text(
                               song.artist,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(color: CupertinoColors.white.withOpacity(0.7), fontSize: 13),
+                              style: TextStyle(
+                                color: CupertinoColors.white.withValues(
+                                  alpha: 0.7,
+                                ),
+                                fontSize: 13,
+                              ),
                             ),
                           ],
                         ),
                       ),
-                      
+
                       // Play/Pause Button
                       CupertinoButton(
                         padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                        onPressed: provider.isPlaying ? provider.pause : provider.resume,
+                        onPressed: provider.isPlaying
+                            ? provider.pause
+                            : provider.resume,
                         child: Icon(
-                          provider.isPlaying ? CupertinoIcons.pause_fill : CupertinoIcons.play_fill,
+                          provider.isPlaying
+                              ? CupertinoIcons.pause_fill
+                              : CupertinoIcons.play_fill,
                           size: 32,
                           color: CupertinoColors.white,
                         ),

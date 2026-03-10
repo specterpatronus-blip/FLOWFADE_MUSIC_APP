@@ -40,11 +40,11 @@ class AudioCrossfadeController {
   List<Song> _playlist = [];
   int _currentIndex = -1;
   int? _preparedNextIndex;
-  bool _shuffleEnabled = false;
   bool _isDisposed = false;
   bool _isTransitioning = false;
   bool _isPlaying = false;
   bool _isHandlingCompletion = false;
+  bool _didPreloadInWindow = false;
 
   double _crossfadeDuration = 5.0;
 
@@ -56,7 +56,9 @@ class AudioCrossfadeController {
   static const Duration _fadeStep = Duration(milliseconds: 50);
 
   Song? get currentSong =>
-      (_currentIndex >= 0 && _currentIndex < _playlist.length) ? _playlist[_currentIndex] : null;
+      (_currentIndex >= 0 && _currentIndex < _playlist.length)
+      ? _playlist[_currentIndex]
+      : null;
   int? get currentIndex => _currentIndex >= 0 ? _currentIndex : null;
   bool get isPlaying => _isPlaying;
   Duration get currentPosition => _activePlayer.position;
@@ -65,12 +67,6 @@ class AudioCrossfadeController {
 
   Future<void> setCrossfadeDuration(double seconds) async {
     _crossfadeDuration = seconds.clamp(0.0, 12.0).toDouble();
-  }
-
-  void setShuffleEnabled(bool enabled) {
-    _shuffleEnabled = enabled;
-    _preparedNextIndex = _resolveNextIndex();
-    unawaited(_prepareInactivePlayer());
   }
 
   Future<void> setPlaylist(
@@ -86,6 +82,7 @@ class AudioCrossfadeController {
     _playlist = List<Song>.from(playlist);
     _currentIndex = startIndex;
     _preparedNextIndex = _resolveNextIndex();
+    _didPreloadInWindow = false;
 
     try {
       await _activePlayer.stop();
@@ -111,33 +108,69 @@ class AudioCrossfadeController {
     }
   }
 
+  Future<void> updateQueue(
+    List<Song> playlist, {
+    required int currentIndex,
+  }) async {
+    if (_isDisposed ||
+        playlist.isEmpty ||
+        currentIndex < 0 ||
+        currentIndex >= playlist.length) {
+      return;
+    }
+
+    _playlist = List<Song>.from(playlist);
+    _currentIndex = currentIndex;
+    _preparedNextIndex = _resolveNextIndex();
+    _didPreloadInWindow = false;
+    await _prepareInactivePlayer();
+  }
+
   Future<void> play() async {
     if (_isDisposed || _currentIndex == -1) return;
     await _activePlayer.play();
     _setPlaying(true);
   }
 
-  Future<void> pauseWithFade({Duration duration = const Duration(milliseconds: 500)}) async {
+  Future<void> pauseWithFade({
+    Duration duration = const Duration(milliseconds: 500),
+  }) async {
     if (_isDisposed || !_isPlaying) return;
-    await _fadeSinglePlayer(_activePlayer, from: _activePlayer.volume, to: 0.0, duration: duration);
+    await _fadeSinglePlayer(
+      _activePlayer,
+      from: _activePlayer.volume,
+      to: 0.0,
+      duration: duration,
+    );
     await _activePlayer.pause();
     await _activePlayer.setVolume(1.0);
     _setPlaying(false);
   }
 
-  Future<void> resumeWithFade({Duration duration = const Duration(milliseconds: 500)}) async {
+  Future<void> resumeWithFade({
+    Duration duration = const Duration(milliseconds: 500),
+  }) async {
     if (_isDisposed || _currentIndex == -1 || _isPlaying) return;
     await _activePlayer.setVolume(0.0);
     await _activePlayer.play();
     _setPlaying(true);
-    await _fadeSinglePlayer(_activePlayer, from: 0.0, to: 1.0, duration: duration);
+    await _fadeSinglePlayer(
+      _activePlayer,
+      from: 0.0,
+      to: 1.0,
+      duration: duration,
+    );
   }
 
   Future<void> seek(Duration position) async {
     if (_isDisposed || _currentIndex == -1) return;
     final duration = _activePlayer.duration ?? Duration.zero;
     final clamped = duration > Duration.zero
-        ? Duration(milliseconds: position.inMilliseconds.clamp(0, duration.inMilliseconds).toInt())
+        ? Duration(
+            milliseconds: position.inMilliseconds
+                .clamp(0, duration.inMilliseconds)
+                .toInt(),
+          )
         : Duration(milliseconds: max(0, position.inMilliseconds).toInt());
     await _activePlayer.seek(clamped);
     onPositionChanged?.call(clamped);
@@ -146,17 +179,32 @@ class AudioCrossfadeController {
   Future<void> next({bool manual = false}) async {
     final targetIndex = _resolveNextIndex();
     if (targetIndex == null || _isTransitioning) return;
+    if (targetIndex == _currentIndex) {
+      await seek(Duration.zero);
+      if (!_isPlaying) {
+        await play();
+      }
+      return;
+    }
 
     final fadeSeconds = manual ? 1.5 : _crossfadeDuration;
     if (fadeSeconds <= 0) {
       await _advanceWithoutFade(targetIndex);
       return;
     }
-    await _executeCrossfade(targetIndex: targetIndex, duration: Duration(milliseconds: (fadeSeconds * 1000).round()));
+    await _executeCrossfade(
+      targetIndex: targetIndex,
+      duration: Duration(milliseconds: (fadeSeconds * 1000).round()),
+    );
   }
 
   Future<void> previous() async {
-    if (_isDisposed || _currentIndex == -1 || _playlist.isEmpty || _isTransitioning) return;
+    if (_isDisposed ||
+        _currentIndex == -1 ||
+        _playlist.isEmpty ||
+        _isTransitioning) {
+      return;
+    }
     final currentPosition = _activePlayer.position.inMilliseconds / 1000.0;
 
     if (currentPosition >= 3.0) {
@@ -165,15 +213,28 @@ class AudioCrossfadeController {
       return;
     }
 
-    int previousIndex;
-    if (_shuffleEnabled) {
-      previousIndex = (_currentIndex - 1 + _playlist.length) % _playlist.length;
-    } else {
-      previousIndex = (_currentIndex - 1 + _playlist.length) % _playlist.length;
-    }
+    final previousIndex =
+        (_currentIndex - 1 + _playlist.length) % _playlist.length;
     await _executeCrossfade(
       targetIndex: previousIndex,
       duration: const Duration(milliseconds: 1500),
+    );
+  }
+
+  Future<void> jumpToIndex(int targetIndex) async {
+    if (_isDisposed || _isTransitioning || _playlist.isEmpty) return;
+    if (targetIndex < 0 || targetIndex >= _playlist.length) return;
+    if (targetIndex == _currentIndex) {
+      await seek(Duration.zero);
+      if (!_isPlaying) {
+        await play();
+      }
+      return;
+    }
+
+    await _executeCrossfade(
+      targetIndex: targetIndex,
+      duration: const Duration(milliseconds: 1200),
     );
   }
 
@@ -197,7 +258,8 @@ class AudioCrossfadeController {
     _activeBufferedSub?.cancel();
 
     _activePlayerStateSub = _activePlayer.playerStateStream.listen((state) {
-      if (state.processingState == ProcessingState.completed && !_isTransitioning) {
+      if (state.processingState == ProcessingState.completed &&
+          !_isTransitioning) {
         unawaited(_handleTrackCompletion());
       }
     });
@@ -211,7 +273,9 @@ class AudioCrossfadeController {
       onDurationChanged?.call(duration ?? Duration.zero);
     });
 
-    _activeBufferedSub = _activePlayer.bufferedPositionStream.listen((buffered) {
+    _activeBufferedSub = _activePlayer.bufferedPositionStream.listen((
+      buffered,
+    ) {
       onBufferedChanged?.call(buffered);
     });
   }
@@ -227,15 +291,30 @@ class AudioCrossfadeController {
   }
 
   void _maybeTriggerAutoCrossfade(Duration position) {
-    if (_isDisposed || !_isPlaying || _isTransitioning || _crossfadeDuration <= 0) return;
+    if (_isDisposed ||
+        !_isPlaying ||
+        _isTransitioning ||
+        _crossfadeDuration <= 0) {
+      return;
+    }
     final duration = _activePlayer.duration;
     if (duration == null || duration <= Duration.zero) return;
 
     final targetIndex = _resolveNextIndex();
     if (targetIndex == null) return;
 
+    final progress = position.inMilliseconds / duration.inMilliseconds;
+    if (!_didPreloadInWindow && progress >= 0.92) {
+      _didPreloadInWindow = true;
+      if (_preparedNextIndex != targetIndex) {
+        _preparedNextIndex = targetIndex;
+      }
+      unawaited(_prepareInactivePlayer());
+    }
+
     final remaining = duration - position;
-    if (remaining <= Duration(milliseconds: (_crossfadeDuration * 1000).round()) &&
+    if (remaining <=
+            Duration(milliseconds: (_crossfadeDuration * 1000).round()) &&
         remaining > const Duration(milliseconds: 50)) {
       unawaited(next(manual: false));
     }
@@ -243,20 +322,8 @@ class AudioCrossfadeController {
 
   int? _resolveNextIndex() {
     if (_playlist.isEmpty || _currentIndex == -1) return null;
-
-    if (_shuffleEnabled) {
-      if (_playlist.length <= 1) return null;
-      final random = Random();
-      int candidate = _currentIndex;
-      while (candidate == _currentIndex) {
-        candidate = random.nextInt(_playlist.length);
-      }
-      return candidate;
-    }
-
-    final nextIndex = _currentIndex + 1;
-    if (nextIndex >= _playlist.length) return null;
-    return nextIndex;
+    if (_playlist.length == 1) return 0;
+    return (_currentIndex + 1) % _playlist.length;
   }
 
   Future<void> _prepareInactivePlayer() async {
@@ -273,7 +340,9 @@ class AudioCrossfadeController {
   }
 
   Future<void> _advanceWithoutFade(int targetIndex) async {
-    if (_isDisposed || targetIndex < 0 || targetIndex >= _playlist.length) return;
+    if (_isDisposed || targetIndex < 0 || targetIndex >= _playlist.length) {
+      return;
+    }
     _isTransitioning = true;
     try {
       await _activePlayer.stop();
@@ -281,6 +350,7 @@ class AudioCrossfadeController {
       await _activePlayer.setFilePath(_playlist[targetIndex].filePath);
       _currentIndex = targetIndex;
       _preparedNextIndex = _resolveNextIndex();
+      _didPreloadInWindow = false;
       await _prepareInactivePlayer();
       onTrackChanged?.call(_playlist[_currentIndex], _currentIndex);
       onPositionChanged?.call(Duration.zero);
@@ -322,7 +392,9 @@ class AudioCrossfadeController {
     required int targetIndex,
     required Duration duration,
   }) async {
-    if (_isDisposed || targetIndex < 0 || targetIndex >= _playlist.length) return;
+    if (_isDisposed || targetIndex < 0 || targetIndex >= _playlist.length) {
+      return;
+    }
     _isTransitioning = true;
 
     try {
@@ -353,6 +425,7 @@ class AudioCrossfadeController {
 
       _currentIndex = targetIndex;
       _preparedNextIndex = _resolveNextIndex();
+      _didPreloadInWindow = false;
       await _prepareInactivePlayer();
       onTrackChanged?.call(_playlist[_currentIndex], _currentIndex);
       onPositionChanged?.call(Duration.zero);
@@ -384,7 +457,6 @@ class AudioCrossfadeController {
   }
 
   void _setPlaying(bool value) {
-    if (_isPlaying == value) return;
     _isPlaying = value;
     onPlayingChanged?.call(_isPlaying);
   }

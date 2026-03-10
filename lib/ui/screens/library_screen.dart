@@ -71,7 +71,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
       navigationBar: const CupertinoNavigationBar(
         backgroundColor: Color(0x00000000), // Transparent
         border: null,
-        middle: Text('Library', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: CupertinoColors.white)),
+        middle: Text(
+          'Library',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: CupertinoColors.white,
+          ),
+        ),
       ),
       child: SafeArea(
         child: Column(
@@ -79,7 +86,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
           children: [
             Consumer<PlaybackProvider>(
               builder: (context, provider, _) => Padding(
-                padding: const EdgeInsets.only(left: 20.0, right: 20.0, top: 16.0, bottom: 8.0),
+                padding: const EdgeInsets.only(
+                  left: 20.0,
+                  right: 20.0,
+                  top: 16.0,
+                  bottom: 8.0,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -94,7 +106,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     ),
                     const SizedBox(height: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(999),
                         color: const Color(0x1FFFFFFF),
@@ -118,22 +133,38 @@ class _LibraryScreenState extends State<LibraryScreen> {
               child: Consumer<PlaybackProvider>(
                 builder: (context, provider, child) {
                   if (provider.library.isEmpty) {
-                    return const Center(child: Text('Loading music...', textAlign: TextAlign.center, style: TextStyle(color: CupertinoColors.systemGrey)));
+                    return const Center(
+                      child: Text(
+                        'Loading music...',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: CupertinoColors.systemGrey),
+                      ),
+                    );
                   }
 
                   return ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16.0,
+                      vertical: 8.0,
+                    ),
                     itemCount: provider.library.length,
                     itemBuilder: (context, index) {
                       final song = provider.library[index];
                       return GestureDetector(
                         onLongPress: () => _showContextMenu(context, song),
                         onTap: () async {
-                          final started = await provider.playSong(song, contextQueue: provider.library);
+                          final started = await provider.playSong(
+                            song,
+                            contextQueue: provider.library,
+                          );
                           if (!context.mounted) return;
 
                           if (started) {
-                            Navigator.of(context).push(CupertinoPageRoute(builder: (_) => const NowPlayingScreen()));
+                            Navigator.of(context).push(
+                              CupertinoPageRoute(
+                                builder: (_) => const NowPlayingScreen(),
+                              ),
+                            );
                             return;
                           }
 
@@ -141,7 +172,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                             context: context,
                             builder: (ctx) => CupertinoAlertDialog(
                               title: const Text('Playback Error'),
-                              content: Text(provider.lastError ?? 'Unable to play this track on iOS.'),
+                              content: Text(
+                                provider.lastError ??
+                                    'Unable to play this track on iOS.',
+                              ),
                               actions: [
                                 CupertinoDialogAction(
                                   onPressed: () => Navigator.of(ctx).pop(),
@@ -160,7 +194,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                               end: Alignment.bottomRight,
                               colors: [Color(0x29FFFFFF), Color(0x14FFFFFF)],
                             ),
-                            border: Border.all(color: const Color(0x2FFFFFFF), width: 1),
+                            border: Border.all(
+                              color: const Color(0x2FFFFFFF),
+                              width: 1,
+                            ),
                           ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(20),
@@ -175,25 +212,37 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                       height: 56,
                                       decoration: BoxDecoration(
                                         borderRadius: BorderRadius.circular(12),
-                                        color: CupertinoColors.black.withOpacity(0.3),
+                                        color: CupertinoColors.black.withValues(
+                                          alpha: 0.3,
+                                        ),
                                         boxShadow: [
                                           BoxShadow(
-                                            color: CupertinoColors.black.withOpacity(0.2),
+                                            color: CupertinoColors.black
+                                                .withValues(alpha: 0.2),
                                             blurRadius: 8,
                                             offset: const Offset(0, 4),
                                           ),
                                         ],
                                       ),
                                       clipBehavior: Clip.hardEdge,
-                                      child: song.artworkPath != null 
-                                          ? Image.file(File(song.artworkPath!), fit: BoxFit.cover)
-                                          : const Icon(CupertinoIcons.music_note, size: 28, color: CupertinoColors.systemGrey),
+                                      child: song.artworkPath != null
+                                          ? Image.file(
+                                              File(song.artworkPath!),
+                                              fit: BoxFit.cover,
+                                            )
+                                          : const Icon(
+                                              CupertinoIcons.music_note,
+                                              size: 28,
+                                              color: CupertinoColors.systemGrey,
+                                            ),
                                     ),
                                     const SizedBox(width: 16),
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
                                         children: [
                                           Text(
                                             song.title,
@@ -212,7 +261,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                             overflow: TextOverflow.ellipsis,
                                             style: TextStyle(
                                               fontSize: 14,
-                                              color: CupertinoColors.white.withOpacity(0.6),
+                                              color: CupertinoColors.white
+                                                  .withValues(alpha: 0.6),
                                             ),
                                           ),
                                         ],
@@ -220,8 +270,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                     ),
                                     CupertinoButton(
                                       padding: EdgeInsets.zero,
-                                      onPressed: () => _showContextMenu(context, song),
-                                      child: Icon(CupertinoIcons.ellipsis, color: CupertinoColors.white.withOpacity(0.6)),
+                                      onPressed: () =>
+                                          _showContextMenu(context, song),
+                                      child: Icon(
+                                        CupertinoIcons.ellipsis,
+                                        color: CupertinoColors.white.withValues(
+                                          alpha: 0.6,
+                                        ),
+                                      ),
                                     ),
                                   ],
                                 ),

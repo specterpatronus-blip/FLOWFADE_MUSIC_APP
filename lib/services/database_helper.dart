@@ -22,8 +22,9 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDB,
+      onUpgrade: _upgradeDB,
     );
   }
 
@@ -70,26 +71,55 @@ CREATE TABLE playlist_songs (
 CREATE TABLE playback_state (
   id INTEGER PRIMARY KEY,
   currentSongId $textNullable,
+  currentIndex $integerType,
   currentPosition $doubleType,
   queue $textNullable,
   shuffleEnabled $integerType,
-  crossfadeDuration $doubleType
+  crossfadeDuration $doubleType,
+  isPlaying $integerType
 )
 ''');
+  }
+
+  Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute(
+        'ALTER TABLE playback_state ADD COLUMN currentIndex INTEGER NOT NULL DEFAULT 0',
+      );
+      await db.execute(
+        'ALTER TABLE playback_state ADD COLUMN isPlaying INTEGER NOT NULL DEFAULT 0',
+      );
+    }
   }
 
   // --- CRUD Songs ---
   Future<void> createSong(Song song) async {
     final db = await instance.database;
-    await db.insert('songs', song.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert(
+      'songs',
+      song.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   Future<Song?> readSong(String id) async {
     final db = await instance.database;
-    final maps = await db.query('songs',
-        columns: ['id', 'filePath', 'originalFileName', 'title', 'artist', 'artworkPath', 'duration', 'dateAdded', 'isMetadataEdited'],
-        where: 'id = ?',
-        whereArgs: [id]);
+    final maps = await db.query(
+      'songs',
+      columns: [
+        'id',
+        'filePath',
+        'originalFileName',
+        'title',
+        'artist',
+        'artworkPath',
+        'duration',
+        'dateAdded',
+        'isMetadataEdited',
+      ],
+      where: 'id = ?',
+      whereArgs: [id],
+    );
 
     if (maps.isNotEmpty) {
       return Song.fromMap(maps.first);
@@ -107,7 +137,12 @@ CREATE TABLE playback_state (
 
   Future<void> updateSong(Song song) async {
     final db = await instance.database;
-    await db.update('songs', song.toMap(), where: 'id = ?', whereArgs: [song.id]);
+    await db.update(
+      'songs',
+      song.toMap(),
+      where: 'id = ?',
+      whereArgs: [song.id],
+    );
   }
 
   Future<void> deleteSong(String id) async {
@@ -120,24 +155,32 @@ CREATE TABLE playback_state (
     final db = await instance.database;
     await db.insert('playlists', playlist.toMap());
     for (int i = 0; i < playlist.songIds.length; i++) {
-        await db.insert('playlist_songs', {
-            'playlistId': playlist.id,
-            'songId': playlist.songIds[i],
-            'position': i
-        });
+      await db.insert('playlist_songs', {
+        'playlistId': playlist.id,
+        'songId': playlist.songIds[i],
+        'position': i,
+      });
     }
   }
 
   Future<List<Playlist>> readAllPlaylists() async {
     final db = await instance.database;
-    final playlistsMap = await db.query('playlists', orderBy: 'dateCreated DESC');
-    
+    final playlistsMap = await db.query(
+      'playlists',
+      orderBy: 'dateCreated DESC',
+    );
+
     List<Playlist> playlists = [];
     for (var pMap in playlistsMap) {
-        final id = pMap['id'] as String;
-        final songsMap = await db.query('playlist_songs', where: 'playlistId = ?', whereArgs: [id], orderBy: 'position ASC');
-        final songIds = songsMap.map((s) => s['songId'] as String).toList();
-        playlists.add(Playlist.fromMap(pMap, songIds: songIds));
+      final id = pMap['id'] as String;
+      final songsMap = await db.query(
+        'playlist_songs',
+        where: 'playlistId = ?',
+        whereArgs: [id],
+        orderBy: 'position ASC',
+      );
+      final songIds = songsMap.map((s) => s['songId'] as String).toList();
+      playlists.add(Playlist.fromMap(pMap, songIds: songIds));
     }
     return playlists;
   }
@@ -150,7 +193,11 @@ CREATE TABLE playback_state (
   // --- Playback State ---
   Future<PlaybackStateModel?> readPlaybackState() async {
     final db = await instance.database;
-    final result = await db.query('playback_state', where: 'id = ?', whereArgs: [1]);
+    final result = await db.query(
+      'playback_state',
+      where: 'id = ?',
+      whereArgs: [1],
+    );
     if (result.isNotEmpty) {
       return PlaybackStateModel.fromMap(result.first);
     }
@@ -161,7 +208,12 @@ CREATE TABLE playback_state (
     final db = await instance.database;
     final exist = await readPlaybackState();
     if (exist != null) {
-      await db.update('playback_state', state.toMap(), where: 'id = ?', whereArgs: [1]);
+      await db.update(
+        'playback_state',
+        state.toMap(),
+        where: 'id = ?',
+        whereArgs: [1],
+      );
     } else {
       await db.insert('playback_state', state.toMap());
     }
